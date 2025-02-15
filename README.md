@@ -28,7 +28,7 @@ The dashboard application includes three components: Airlines, Airports, and Fli
 Clone the project
 
 ```bash
-  git clone git@github.com:nachiket-more/CS-564-001-Front-End-Project.git
+  git clone https://github.com/SayleeMJ/Flight-Network-Visualizer.git
 ```
 
 Go to the project frontend and backend directories
