@@ -34,10 +34,10 @@ Clone the project
 Go to the project frontend and backend directories
 
 ```bash
-  cd CS-564-001-Front-End-Project\frontend-app
+  cd Flight-Network-Visualizer\frontend-app
 ```
 ```bash
-  cd CS-564-001-Front-End-Project\backend-app
+  cd Flight-Network-Visualizer\backend-app
 ```
 Install NodeJs in both directories
 ```bash
