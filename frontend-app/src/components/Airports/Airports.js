@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react';
+import axios from 'axios';
 import './Airports.css';
 import {
   Table,
@@ -15,127 +16,108 @@ import UsAirportMap from './charts/UsAirportMap';
 import AirportsPieChart from './charts/AirportsPieChart';
 
 const Airports = () => {
-  // Using context to get data
   const data = useContext(DataContext);
+  const airportsData = data.airportsData;
 
-  // States for data management
-  const [, setAirlinesData] = useState(null);
-  const [flightsData, setFlightsData] = useState(null);
-  const [airportsData, setAirportsData] = useState(null);
+  const [trafficCounts, setTrafficCounts] = useState(null);
   const [trafficData, setTrafficData] = useState([]);
-  const [key, setKey] = useState(0);
+  const [selectedState, setSelectedState] = useState('WA');
   const [markersData, setMarkersData] = useState([]);
 
-  // Fetch and set data from context
+  // Fetch compact airport traffic counts
   useEffect(() => {
-    if (
-      data.airportsData != null &&
-      data.flightsData != null &&
-      data.airlinesData != null
-    ) {
-      console.log(data.airportsData);
-      setAirlinesData(data.airlinesData);
-      setFlightsData(data.flightsData);
-      setAirportsData(data.airportsData);
-    }
-  }, [data]);
-
-  // State for selected US state 'WA'
-  const [selectedState, setSelectedState] = useState('WA');
-
-  // Handle change of selected state
-  const handleSelectedState = (selectedItem) => {
-    setSelectedState(selectedItem);
-  };
-
-  // Fetch and set marker data and traffic data based on selected state
-  useEffect(() => {
-    const handlesetMarkers = (selectedItem) => {
-      const markers = airportsData
-        .filter((airport) => airport.STATE === selectedItem)
-        .map((airport) => ({
-          markerOffset: 0,
-          code: airport.IATA_CODE,
-          city: airport.CITY,
-          coordinates: [airport.LONGITUDE, airport.LATITUDE],
-        }));
-
-      setMarkersData(markers);
+    const fetchTraffic = async () => {
+      try {
+        const response = await axios.get(
+          'http://localhost:5050/airports/traffic'
+        );
+        setTrafficCounts(response.data);
+      } catch (error) {
+        console.error('Error fetching airport traffic:', error);
+        setTrafficCounts(null);
+      }
     };
 
-    const getTrafficData = (selectedState) => {
-      const filteredAirports = airportsData
-        .filter((airport) => airport.STATE === selectedState)
-        .map(({ CITY, IATA_CODE }) => ({ city: CITY, code: IATA_CODE }));
+    fetchTraffic();
+  }, []);
 
-      const result = [['City', 'Traffic']].concat(
-        filteredAirports.map(({ city, code }) => {
-          const depCount = flightsData.filter(
-            (flight) => flight.ORIGIN_AIRPORT === code
-          ).length;
-          const arrCount = flightsData.filter(
-            (flight) => flight.DESTINATION_AIRPORT === code
-          ).length;
-
-          const traffic = depCount + arrCount;
-
-          return [city, traffic];
-        })
-      );
-
-      setTrafficData(result);
-    };
-
-    if (airportsData != null) {
-      handlesetMarkers(selectedState);
-      getTrafficData(selectedState);
-    }
-  }, [selectedState, airportsData, flightsData]);
-
-  // Increment key for components that rely on it
+  // Update markers and traffic when the selected state changes
   useEffect(() => {
-    setKey((prevKey) => prevKey + 1);
-  }, [markersData]);
+    if (!airportsData || !trafficCounts) return;
 
-  return (
+    const stateAirports = airportsData.filter(
+      (airport) => airport.STATE === selectedState
+    );
+
+    const markers = stateAirports.map((airport) => ({
+      markerOffset: 0,
+      code: airport.IATA_CODE,
+      city: airport.CITY,
+      state: airport.STATE,
+      coordinates: [airport.LONGITUDE, airport.LATITUDE],
+    }));
+
+    setMarkersData(markers);
+
+    const departures = new Map(
+      trafficCounts.departures.map((item) => [item._id, item.count])
+    );
+
+    const arrivals = new Map(
+      trafficCounts.arrivals.map((item) => [item._id, item.count])
+    );
+
+    const result = [['City', 'Traffic']];
+
+    stateAirports.forEach((airport) => {
+      const depCount = departures.get(airport.IATA_CODE) || 0;
+      const arrCount = arrivals.get(airport.IATA_CODE) || 0;
+
+      result.push([airport.CITY, depCount + arrCount]);
+    });
+
+    setTrafficData(result);
+  }, [selectedState, airportsData, trafficCounts]);
+
+  const [key, setKey] = useState(0);  return (
     <div className='page-container airports-container'>
       <div className='top'>
-        {/* Card for displaying airport distribution */}
         <div className='card-container airports-map-card'>
           <div>
             <div className='card-title'>Airport Distribution</div>
-            {/* Dropdown for selecting US state */}
+
             {airportsData != null && (
-              <Dropdown onSelect={handleSelectedState}>
+              <Dropdown onSelect={setSelectedState}>
                 <Dropdown.Toggle className='btn-primary' id='dropdown-basic'>
                   {selectedState}
                 </Dropdown.Toggle>
+
                 <Dropdown.Menu>
-                  {/* Display unique US states */}
-                  {[
-                    ...new Set(airportsData.map((airport) => airport.STATE)),
-                  ].map((item, index) => (
-                    <Dropdown.Item key={index} eventKey={item} href=''>
-                      {item}
-                    </Dropdown.Item>
-                  ))}
+                  {[...new Set(airportsData.map((airport) => airport.STATE))]
+                    .filter(Boolean)
+                    .map((item, index) => (
+                      <Dropdown.Item key={index} eventKey={item}>
+                        {item}
+                      </Dropdown.Item>
+                    ))}
                 </Dropdown.Menu>
               </Dropdown>
             )}
           </div>
 
-          {/* Display map with airport markers */}
           <div className='airports-map'>
-            <UsAirportMap markersData={markersData} key={key} />
+            <UsAirportMap
+              markersData={markersData}
+              selectedState={selectedState}
+            />
           </div>
         </div>
 
-        {/* Card for displaying cities with busiest airports */}
         <div className='card-container busiest-airports-card'>
           <div className='card-title'>Cities with Busiest Airports</div>
+
           <div className='busiest-airports'>
-            {/* Display pie chart */}
-            {trafficData.length !== 0 && (
+            {trafficData.length > 1 && (
               <AirportsPieChart
                 trafficData={trafficData}
                 styled={{
@@ -149,11 +131,9 @@ const Airports = () => {
         </div>
       </div>
 
-      {/* Card for displaying list of airports */}
       <div className='bottom'>
         <div className='card-container airports-list-card'>
           <div className='airports-list'>
-            {/* Display table of airports */}
             {airportsData != null && (
               <TableContainer component={Paper}>
                 <Table sx={{ minWidth: 0 }} aria-label='simple table'>
@@ -173,8 +153,8 @@ const Airports = () => {
                       </TableCell>
                     </TableRow>
                   </TableHead>
+
                   <TableBody>
-                    {/* Display rows of airport data */}
                     {airportsData.map((row) => (
                       <TableRow
                         key={row.AIRPORT}

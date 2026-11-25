@@ -1,74 +1,46 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useCallback } from 'react';
 import './Flights.css';
 import UsGeoMap from './charts/UsFlightMap';
 import Dropdown from 'react-bootstrap/Dropdown';
-
 import { DataContext } from '../../context/DataContext';
 
 const Flights = () => {
-  // Context for accessing shared data
   const data = useContext(DataContext);
 
-  // States for holding data
-  const [airlinesData, setAirlinesData] = useState(null);
-  const [, setFlightsData] = useState(null);
-  const [, setAirportsData] = useState(null);
-  const [key, setKey] = useState(0);
+  const airlinesData = data.airlinesData;
+
   const [selectedAirline, setSelectedAirline] = useState(
     'United Air Lines Inc.'
   );
   const [selectedOrigin, setSelectedOrigin] = useState('select city');
-  const [totalAirlines] = useState(13);
+
+  const totalAirlines = 13;
   const [totalFlights, setTotalFlights] = useState(null);
   const [totalOrigins, setTotalOrigins] = useState(null);
   const [totalDest, setTotalDest] = useState(null);
-  const [flightOrigins, setFlightOrigins] = useState({});
+  const [flightOrigins, setFlightOrigins] = useState([]);
 
-  // Effect to set data when it becomes available
-  useEffect(() => {
-    if (
-      data.airportsData != null &&
-      data.flightsData != null &&
-      data.airlinesData != null
-    ) {
-      setAirlinesData(data.airlinesData);
-      setFlightsData(data.flightsData);
-      setAirportsData(data.airportsData);
-    }
-  }, [data]);
-
-  // Handler for selecting origin
-  const handleSelectedOrigin = (selectedItem) => {
-    setSelectedOrigin(selectedItem);
-  };
-
-  // Effect to update key when selected origin changes
-  useEffect(() => {
-    setKey((prevKey) => prevKey + 1);
-  }, [selectedOrigin]);
-
-  // Handler for selecting airline
+  // Reset origin when airline changes
   const handleSelectedAirline = (selectedItem) => {
     setSelectedAirline(selectedItem);
     setSelectedOrigin('select city');
   };
 
-  // Effect to update key when selected airline changes
-  useEffect(() => {
-    setKey((prevKey) => prevKey + 1);
-  }, [selectedAirline]);
-
-  // Handler for updating flight values
-  const handleFlightValues = (data) => {
-    setTotalFlights(data.total_flights);
-    setTotalOrigins(data.total_origins);
-    setTotalDest(data.total_dest);
+  const handleSelectedOrigin = (selectedItem) => {
+    setSelectedOrigin(selectedItem);
   };
 
-  // Handler for updating flight origins
-  const handleFlightOrigins = (data) => {
-    setFlightOrigins(data);
-  };
+  // Update summary cards
+  const handleFlightValues = useCallback((values) => {
+    setTotalFlights(values.total_flights);
+    setTotalOrigins(values.total_origins);
+    setTotalDest(values.total_dest);
+  }, []);
+
+  // Update origin dropdown options
+  const handleFlightOrigins = useCallback((origins) => {
+    setFlightOrigins(Array.from(origins));
+  }, []);
 
   return (
     <div>
@@ -84,14 +56,15 @@ const Flights = () => {
           <div className='bottom'>
             <div className='card-container usmap-card'>
               <div>
-                {<div className='card-title'>Flights Distribution</div>}
+                <div className='card-title'>Flights Distribution</div>
+
                 <div
                   style={{
                     display: 'flex',
                     columnGap: '10px',
                   }}
                 >
-                  {/* Dropdown for selecting airline */}
+                  {/* Airline dropdown */}
                   <Dropdown onSelect={handleSelectedAirline}>
                     <Dropdown.Toggle
                       className='btn-primary'
@@ -99,20 +72,24 @@ const Flights = () => {
                     >
                       {selectedAirline}
                     </Dropdown.Toggle>
+
                     <Dropdown.Menu>
                       {[
                         ...new Set(
-                          airlinesData.map((flight) => flight.AIRLINE)
+                          airlinesData.map((airline) => airline.AIRLINE)
                         ),
-                      ].map((item, index) => (
-                        <Dropdown.Item key={index} eventKey={item} href=''>
+                      ].map((item) => (
+                        <Dropdown.Item
+                          key={item}
+                          eventKey={item}
+                        >
                           {item}
                         </Dropdown.Item>
                       ))}
                     </Dropdown.Menu>
                   </Dropdown>
 
-                  {/* Dropdown for selecting origin */}
+                  {/* Origin dropdown */}
                   <Dropdown onSelect={handleSelectedOrigin}>
                     <Dropdown.Toggle
                       className='btn-primary'
@@ -120,9 +97,13 @@ const Flights = () => {
                     >
                       Origin: {selectedOrigin}
                     </Dropdown.Toggle>
+
                     <Dropdown.Menu>
-                      {Array.from(flightOrigins).map((item, index) => (
-                        <Dropdown.Item key={index} eventKey={item} href=''>
+                      {flightOrigins.map((item) => (
+                        <Dropdown.Item
+                          key={item }
+                          eventKey={item}
+                        >
                           {item}
                         </Dropdown.Item>
                       ))}
@@ -130,9 +111,9 @@ const Flights = () => {
                   </Dropdown>
                 </div>
               </div>
+
               <div className='usmap-flights'>
                 <UsGeoMap
-                  key={key}
                   selectedAirline={selectedAirline}
                   selectedOrigin={selectedOrigin}
                   flightValues={handleFlightValues}
@@ -147,7 +128,7 @@ const Flights = () => {
   );
 };
 
-// Function to generate flight cards
+// Summary cards
 const flightCards = (title, value, id) => {
   return (
     <div className='card-container airlines-card' id={id}>

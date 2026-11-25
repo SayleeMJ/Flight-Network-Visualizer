@@ -1,5 +1,6 @@
-import React, { useState, useContext, useEffect, useCallback } from 'react';
-import Tooltip from '@mui/material/Tooltip';
+import React, { useState, useContext, useEffect } from 'react';
+import axios from 'axios';
+
 import {
   ComposableMap,
   Geographies,
@@ -7,6 +8,7 @@ import {
   Marker,
   Line,
 } from 'react-simple-maps';
+
 import {
   Table,
   TableBody,
@@ -16,9 +18,10 @@ import {
   TableRow,
   Paper,
 } from '@mui/material';
+
 import { DataContext } from '../../../context/DataContext';
 
-const geoUrl = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json';
+const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
 const UsGeoMap = ({
   selectedAirline,
@@ -26,139 +29,170 @@ const UsGeoMap = ({
   flightValues,
   flightOriginsData,
 }) => {
-  // Context for accessing shared data
   const data = useContext(DataContext);
 
-  // States for holding data
-  const [airlinesData, setAirlinesData] = useState(null);
-  const [flightsData, setFlightsData] = useState(null);
-  const [airportsData, setAirportsData] = useState(null);
-  const [routesData, setRoutesData] = useState(null);
-  const [markersData, setMarkersData] = useState(null);
+  const [routesData, setRoutesData] = useState([]);
+  const [markersData, setMarkersData] = useState([]);
   const [routesTable, setRoutesTable] = useState([]);
-  const [, setFlightOrigins] = useState({});
-  const [selectedRoute, setSelectedRoute] = useState({});
-  const [updateKey, setUpdateKey] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  // Function to handle setting routes
-  const handleSetRoutes = useCallback(
-    (selectedItem) => {
-      // Extracting airline code based on selected item
-      const airlineCode = airlinesData.find(
-        (airline) => airline.AIRLINE === selectedItem
-      ).IATA_CODE;
-
-      // Filtering flights data based on the selected airline
-      const airlineFlights = flightsData.filter(
-        (flights) => flights.AIRLINE === airlineCode
-      );
-
-      // Mapping flights data to a more usable format (routes)
-      const routes = airlineFlights.map(
-        ({ ORIGIN_AIRPORT, DESTINATION_AIRPORT }) => ({
-          dep_code: ORIGIN_AIRPORT,
-          dep:
-            airportsData.find((airport) => airport.IATA_CODE === ORIGIN_AIRPORT)
-              ?.CITY || ORIGIN_AIRPORT,
-          arr_code: DESTINATION_AIRPORT,
-          arr:
-            airportsData.find(
-              (airport) => airport.IATA_CODE === DESTINATION_AIRPORT
-            )?.CITY || DESTINATION_AIRPORT,
-        })
-      );
-
-      // Extracting unique origins for flight origins data
-      const origins = new Set(routes.map((obj) => obj.dep));
-      setFlightOrigins(origins);
-      flightOriginsData(origins);
-
-      // Mapping routes data for table display
-      const flightRows = routes.map((item) =>
-        createData(item.dep, item.dep_code, item.arr, item.arr_code)
-      );
-      setRoutesTable(flightRows);
-
-      // Mapping markers data for map display
-      const markers = Array.from(
-        new Set(routes.flatMap((route) => [route.dep, route.arr]))
-      ).map((city) => {
-        const airport = airportsData.find((airport) => airport.CITY === city);
-        return airport
-          ? {
-              markerOffset: 1,
-              code: airport.IATA_CODE,
-              city,
-              coordinates: [airport.LONGITUDE, airport.LATITUDE],
-            }
-          : null;
-      });
-      console.log('Flight Markers are: ', markers);
-      setRoutesData(routes);
-      setMarkersData(markers);
-
-      // Passing flight values to parent component
-      flightValues({
-        total_flights: routes.length,
-        total_origins: new Set(routes.map((obj) => obj.dep)).size,
-        total_dest: new Set(routes.map((obj) => obj.arr)).size,
-      });
-    },
-    [airlinesData, airportsData, flightOriginsData, flightValues, flightsData]
-  );
-
-  // Effect to handle setting routes when data is ready
+  // Fetch only the selected airline's routes
   useEffect(() => {
-    if (airportsData && flightsData && airlinesData) {
-      handleSetRoutes(selectedAirline);
+    if (!data.airlinesData || !data.airportsData || !selectedAirline) {
+      return;
     }
+
+    let isActive = true;
+
+    const fetchRoutes = async () => {
+      setLoading(true);
+
+      try {
+        const airline = data.airlinesData.find(
+          (item) => item.AIRLINE === selectedAirline
+        );
+
+        if (!airline) {
+          throw new Error('Selected airline was not found');
+        }
+
+        const response = await axios.get(
+          `http://localhost:5050/flights/routes/${airline.IATA_CODE}`
+        );
+
+        if (!isActive) return;
+
+        const airportsByCode = new Map(
+          data.airportsData.map((airport) => [
+            airport.IATA_CODE,
+            airport,
+          ])
+        );
+
+        // Convert airport codes into route details
+        const routes = response.data.map((flight) => {
+          const originAirport = airportsByCode.get(
+            flight.ORIGIN_AIRPORT
+          );
+
+          const destinationAirport = airportsByCode.get(
+            flight.DESTINATION_AIRPORT
+          );
+
+          return {
+            dep_code: flight.ORIGIN_AIRPORT,
+            dep: originAirport?.CITY || flight.ORIGIN_AIRPORT,
+            arr_code: flight.DESTINATION_AIRPORT,
+            arr: destinationAirport?.CITY || flight.DESTINATION_AIRPORT,
+          };
+        });
+
+        // Unique origin cities
+        const origins = new Set(routes.map((route) => route.dep));
+
+        flightOriginsData(origins);
+
+        // Prepare route table
+        const flightRows = routes.map((route) => ({
+          Origin: route.dep,
+          Origin_Code: route.dep_code,
+          Dest: route.arr,
+          Dest_Code: route.arr_code,
+        }));
+
+        // Prepare unique airport markers using airport codes
+        const airportCodes = new Set(
+          routes.flatMap((route) => [
+            route.dep_code,
+            route.arr_code,
+          ])
+        );
+
+        const markers = Array.from(airportCodes)
+          .map((code) => {
+            const airport = airportsByCode.get(code);
+
+            if (
+              !airport ||
+              !Number.isFinite(airport.LONGITUDE) ||
+              !Number.isFinite(airport.LATITUDE)
+            ) {
+              return null;
+            }
+
+            return {
+              code: airport.IATA_CODE,
+              coordinates: [
+                airport.LONGITUDE,
+                airport.LATITUDE,
+              ],
+            };
+          })
+          .filter(Boolean);
+
+        setRoutesData(routes);
+        setRoutesTable(flightRows);
+        setMarkersData(markers);
+
+        // Update summary cards
+        flightValues({
+          total_flights: routes.length,
+          total_origins: origins.size,
+          total_dest: new Set(routes.map((route) => route.arr)).size,
+        });
+      } catch (error) {
+        if (isActive) {
+          console.error('Error fetching airline routes:', error);
+
+          setRoutesData([]);
+          setRoutesTable([]);
+          setMarkersData([]);
+          flightOriginsData(new Set());
+
+          flightValues({
+            total_flights: 0,
+            total_origins: 0,
+            total_dest: 0,
+          });
+        }
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchRoutes();
+
+    return () => {
+      isActive = false;
+    };
   }, [
-    airportsData,
-    flightsData,
-    airlinesData,
-    handleSetRoutes,
     selectedAirline,
+    data.airlinesData,
+    data.airportsData,
+    flightValues,
+    flightOriginsData,
   ]);
 
-  // Effect to set data when it becomes available
-  useEffect(() => {
-    if (
-      data.airportsData != null &&
-      data.flightsData != null &&
-      data.airlinesData != null
-    ) {
-      setAirlinesData(data.airlinesData);
-      setFlightsData(data.flightsData);
-      setAirportsData(data.airportsData);
-    }
-  }, [data]);
-
-  // Function to create data for table rows
-  function createData(Origin, Origin_Code, Dest, Dest_Code) {
-    return { Origin, Origin_Code, Dest, Dest_Code };
+  if (loading) {
+    return <div>Loading flight routes...</div>;
   }
 
-  // Function to handle selecting a flight and updating selected route
-  const handleSelectFlight = (event, rowData) => {
-    setSelectedRoute({
-      dep: markersData.find((marker) => marker.city === rowData.Origin)
-        .coordinates,
-      arr: markersData.find((marker) => marker.city === rowData.Dest)
-        .coordinates,
-    });
-  };
-
-  // Effect to update key for triggering re-render
-  useEffect(() => {
-    setUpdateKey(updateKey + 1);
-  }, [selectedRoute, updateKey]);
+  const markersByCode = new Map(
+    markersData.map((marker) => [marker.code, marker])
+  );
 
   return (
-    <div style={{ display: 'flex', width: '100%' }}>
-      {markersData != null && (
+    <div  style={{ display: 'flex', width: '100%', gap: '20px'}}>
+      {markersData.length > 0 && (
         <ComposableMap
+          projection='geoEqualEarth'
+          projectionConfig={{
+            scale: 430,
+            center: [-115, 35],
+          }}
           style={{ width: '100%', height: '100%' }}
-          projection='geoAlbersUsa'
         >
           <Geographies geography={geoUrl}>
             {({ geographies }) => (
@@ -172,59 +206,53 @@ const UsGeoMap = ({
                   />
                 ))}
 
-                {routesData.map((route) => {
-                  var from = null;
-                  var to = null;
-
-                  if (route.dep === selectedOrigin) {
-                    from = markersData.find(
-                      (marker) => marker.city === selectedOrigin
-                    );
-                    to = markersData.find(
-                      (marker) => marker.city === route.arr
-                    );
-                    return (
-                      <Line
-                        key={updateKey}
-                        from={from.coordinates}
-                        to={to.coordinates}
-                        stroke='#9055A2'
-                        strokeWidth={2}
-                        strokeLinecap='round'
-                      />
-                    );
+                {/* Draw routes for the selected origin */}
+                {routesData.map((route, index) => {
+                  if (
+                    selectedOrigin === 'select city' ||
+                    route.dep !== selectedOrigin
+                  ) {
+                    return null;
                   }
-                  return null;
-                })}
 
-                {markersData.map(({ code, city, coordinates }) => {
+                  const from = markersByCode.get(route.dep_code);
+                  const to = markersByCode.get(route.arr_code);
+
+                  if (!from || !to) return null;
+
                   return (
-                    <Tooltip title={city} placement='top'>
-                      <Marker
-                        key={city}
-                        coordinates={coordinates}
-                        data-tip={code}
-                        data-for={`tooltip-${city}`}
-                      >
-                        <circle
-                          r={3}
-                          fill='#011638'
-                          stroke='#011638'
-                          strokeWidth={2}
-                        />
-                      </Marker>
-                    </Tooltip>
+                    <Line
+                      key={`${route.dep_code}-${route.arr_code}-${index}`}
+                      from={from.coordinates}
+                      to={to.coordinates}
+                      stroke='#9055A2'
+                      strokeWidth={1.5}
+                      strokeLinecap='round'
+                    />
                   );
                 })}
+
+                {/* Airport markers */}
+                {markersData.map(({ code, coordinates }) => (
+                  <Marker key={code} coordinates={coordinates}>
+                    <circle
+                      r={4}
+                      fill='#E63946'
+                      stroke='white'
+                      strokeWidth={1}
+                    />
+                  </Marker>
+                ))}
               </>
             )}
           </Geographies>
         </ComposableMap>
       )}
 
+      {/* Routes table */}
       <div className='card-container flights-list-card'>
         <div className='flights-list'>
-          {routesTable.length > 1 && (
+          {routesTable.length > 0 && (
             <TableContainer component={Paper}>
               <Table sx={{ minWidth: 0 }} aria-label='simple table'>
                 <TableHead>
@@ -237,16 +265,19 @@ const UsGeoMap = ({
                     </TableCell>
                   </TableRow>
                 </TableHead>
+
                 <TableBody>
-                  {routesTable.map((row) => (
+                  {routesTable.map((row, index) => (
                     <TableRow
-                      key={row.airline}
-                      sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                      onClick={(event) => handleSelectFlight(event, row)}
+                      key={`${row.Origin_Code}-${row.Dest_Code}-${index}`}
+                      sx={{
+                        '&:last-child td, &:last-child th': { border: 0 },
+                      }}
                     >
                       <TableCell align='center' style={{ minWidth: 0 }}>
                         {row.Origin}
                       </TableCell>
+
                       <TableCell align='center' style={{ minWidth: 0 }}>
                         {row.Dest}
                       </TableCell>
