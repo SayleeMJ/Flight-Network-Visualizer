@@ -29,7 +29,7 @@ const Airports = () => {
     const fetchTraffic = async () => {
       try {
         const response = await axios.get(
-          'http://localhost:5050/airports/traffic'
+          'https://flight-network-visualizer.onrender.com/airports/traffic'
         );
         setTrafficCounts(response.data);
       } catch (error) {

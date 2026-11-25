@@ -11,7 +11,7 @@ const DataProvider = ({ children }) => {
     const fetchAirlineData = async () => {
       try {
         const response = await axios.get(
-          'http://localhost:5050/airlines/all'
+          'https://flight-network-visualizer.onrender.com/airlines/all'
         );
         setAirlinesData(response.data);
       } catch (error) {
@@ -22,7 +22,7 @@ const DataProvider = ({ children }) => {
     const fetchAirportData = async () => {
       try {
         const response = await axios.get(
-          'http://localhost:5050/airports/all'
+          'https://flight-network-visualizer.onrender.com/airports/all'
         );
         setAirportsData(response.data);
       } catch (error) {

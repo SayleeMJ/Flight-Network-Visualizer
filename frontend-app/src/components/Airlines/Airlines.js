@@ -17,8 +17,8 @@ const Airlines = () => {
     const fetchData = async () => {
       try {
         const [airlinesResponse, summaryResponse] = await Promise.all([
-          axios.get('http://localhost:5050/airlines/all'),
-          axios.get('http://localhost:5050/airlines/summary')
+          axios.get('https://flight-network-visualizer.onrender.com/airlines/all'),
+          axios.get('https://flight-network-visualizer.onrender.com/airlines/summary')
         ]);
 
         setAirlinesData(airlinesResponse.data);
@@ -52,7 +52,7 @@ const Airlines = () => {
     const fetchHistory = async () => {
       try {
         const response = await axios.get(
-          `http://localhost:5050/airlines/history/${airline.IATA_CODE}`
+          `https://flight-network-visualizer.onrender.com/airlines/history/${airline.IATA_CODE}`
         );
         setHistoryData(response.data);
       } catch (error) {

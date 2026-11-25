@@ -57,7 +57,7 @@ const UsGeoMap = ({
         }
 
         const response = await axios.get(
-          `http://localhost:5050/flights/routes/${airline.IATA_CODE}`
+          `https://flight-network-visualizer.onrender.com/flights/routes/${airline.IATA_CODE}`
         );
 
         if (!isActive) return;
